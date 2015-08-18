@@ -1,0 +1,103 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Marowen Ng"
+date: "Monday, August 17, 2015"
+output: html_document
+---
+
+<style type="text/css">
+ 
+body, td {
+   font-size: 12px;
+}
+code.r{
+  font-size: 12px;
+}
+pre {
+  font-size: 12px
+}
+</style>
+
+#### Background
+####### This report describes a model to predict the manner in which six participants did barbell lifts in different ways. 
+
+#### Getting Data
+####### First, download the raw data to a local folder, and then load the data onto R.
+```{r,echo = TRUE, results ='hide'}
+setwd("~/R/PMLproject")
+pmltrain <- read.csv("pml-training.csv")
+```
+
+#### Model Building
+####### Pre-load the (potentially) required packages for model building.
+```{r,echo = TRUE, results ='hide', message=FALSE, warning=FALSE}
+library(AppliedPredictiveModeling)
+library(caret)
+library(ElemStatLearn)
+```
+
+####### It is imperative that one takes a quick look at the raw dataset before even starting. There are many columns that are either empty or containing only very few values (the rest being NA). The raw data therefore needs to be cleaned up.
+
+####### First thing first, save as a new data frame and remove columns that have 90% NA values (pointless to build a model if the variables have too many missing values). Then, go one step further by removing any near-zero covariantes because those are also quite useless in building a model. In addition, the first five columns are also not covariates, and therefore can be removed as well. The end result is a new data frame with 54 columns (53 variables and 1 outcome).
+```{r,echo = TRUE}
+newtrain <- pmltrain
+newtrain <- newtrain[,colSums(is.na(newtrain))<nrow(newtrain)*0.9]
+nsv <- nearZeroVar(newtrain)
+newtrain <- newtrain[,-nsv]
+newtrain <- newtrain[,-c(1:5)]
+dim(newtrain)
+```
+
+####### Now the new dataset can be split into training and testing data sets. Since the sample size is large, the dataset can be split equally.
+```{r,echo = TRUE}
+inTrain = createDataPartition(newtrain$classe, p = 0.5, list=FALSE)
+training = newtrain[ inTrain,]
+testing = newtrain[-inTrain,]
+dim(training)
+dim(testing)
+```
+
+####### Because it has been touted as the method that gives the best accuracy, random forest will be used to bootstrap variables for building a predictive model. This can be achieved by using the "rf" method of the train function in the 'caret' package, however, earlier attempts had been unsuccessful due to its overlong processing times.
+
+####### Fortunately there is a separate package called 'randomForest' that does the same thing but as a stand-alone function specifically for doing random forest method. Using this method, a model fit is built for classe against all other variables, based on the training dataset. The error rate of this model is <1% which is extremely low. The model therefore fits the training set very well.
+```{r,echo = TRUE, message=FALSE, warning=FALSE}
+library(randomForest)
+modFit <- randomForest(classe ~ ., data=training)
+modFit
+```
+
+#### Model Validation
+####### Now this model can be applied to predict on the testing set. The confusionMatrix function in the 'caret' package shows >99% accuracy of the prediction model on the test dataset. This essentially cross-validates that the model that was based on the training set fits the test dataset almost perfectly.
+```{r,echo = TRUE}
+predictions <- predict(modFit, testing)
+testcm <- confusionMatrix(predictions, testing$classe)
+testcm
+```
+
+#### Prediction For Test Cases
+####### Finally, this model will be used to predict the classe of twenty test cases. Similarly, the raw data was downloaded to a local folder and loaded onto R. The first five non-covariates columns and columns with >90% NA values are also removed. The end result is a new data frame with 55 columns (54 variables and 1 problem id).
+```{r,echo = TRUE}
+pmltest <- read.csv("pml-testing.csv")
+newtest <- pmltest
+newtest <- newtest[,colSums(is.na(newtest))<nrow(newtest)*0.9]
+newtest <- newtest[,-c(1:5)]
+dim(newtest)
+```
+
+####### The following is the prediction of the twenty test cases using the fitted model. The first row represents each of the test case and the second row is the corresponding classe predicted by the model.
+```{r,echo = TRUE}
+submission <- predict(modFit, newtest[,-55])
+submission
+```
+
+####### The function provided in the assignment page generates twenty individual text files containing the predicted classe for each problem id (a.k.a. test case). After the files are confirmed to be in the working folder, they can be submitted for grading. Upon submission, one will find that all twenty cases were predicted correctly.
+```{r,echo = TRUE}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(submission)
+```
